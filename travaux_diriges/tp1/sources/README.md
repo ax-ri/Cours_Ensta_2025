@@ -102,16 +102,16 @@ Ainsi, dans la permutation `j,k,i`, la variable qui change le plus souvent est i
 
 `make TestProduct.exe && OMP_NUM_THREADS=8 ./TestProduct.exe 1024`
 
-| OMP_NUM | MFlops  | MFlops(n=2048) | MFlops(n=512) | MFlops(n=4096) |
-| ------- | ------- | -------------- | ------------- | -------------- |
-| 1       | 7142.27 | 5395.81        | 8068.48       | 5362.13        |
-| 2       | 7110.69 | 5447.11        | 8467.02       | 5345.9         |
-| 3       | 6955.71 | 5417.31        | 7730.97       | 5369.84        |
-| 4       | 6963.14 | 5153.35        | 8561.53       | 5228.69        |
-| 5       | 6680.09 | 5341.49        | 7276.03       | 5357.67        |
-| 6       | 6613.53 | 5322.82        | 6983.66       | 5076.28        |
-| 7       | 6510.1  | 5230.89        | 6852.23       | 5229.06        |
-| 8       | 6627.81 | 5265.54        | 7226.9        | 5036.55        |
+| OMP_NUM | MFlops   | MFlops(n=2048) | MFlops(n=512) | MFlops(n=4096) |
+| ------- | -------- | -------------- | ------------- | -------------- |
+| 1       | 4 438.17 | 4 222.92       | 5 303.32      | 3 822.43       |
+| 2       | 6 946.9  | 7 604.75       | 4 603.71      | 7 626.4        |
+| 3       | 10 153.7 | 9 855.08       | 9 831.91      | 9 989.92       |
+| 4       | 12 135.7 | 14 841.4       | 8 387.07      | 11 182.8       |
+| 5       | 13 571.8 | 12 725.6       | 7 689.66      | 11 339.4       |
+| 6       | 14 308.6 | 13 102.8       | 4 720.54      | 12 679.2       |
+| 7       | 14 930.6 | 16 147.7       | 5 234.69      | 14 232         |
+| 8       | 14 426.8 | 13 865.5       | 3 944.23      | 11 796         |
 
 *Tracer les courbes de speedup (pour chaque valeur de n), discuter les résultats.*
 
@@ -119,20 +119,20 @@ On obtient les courbes suivantes :
 
 ![courbes question 3 et 4](ex1_q3.png)
 
-On remarque qu'à partir de 4, les performances diminuent. Cela est sûrement dû à une saturation de la bande passante du fait des différents threads qui essaient d'accéder à la mémoire en même temps.
+On remarque que pour toutes les tailles de matrices, le nombre d'opérations par seconde augmente (suivant une courbe qui ressemble à un logarithme) avec le parallélisme, excepté pour une taille de matrice de 512. Pour cette dimension, les performances chutent après 3, probablement parce que l'accès concurrent n'est pas optimal pour les petites dimensions.
 
 ### 5 - Produit par blocs
 
 `make TestProduct.exe && ./TestProduct.exe 1024`
 
-| szBlock | MFlops  | MFlops(n=2048) | MFlops(n=512) | MFlops(n=4096) |
-| ------- | ------- | -------------- | ------------- | -------------- |
-| 32      | 7203.63 | 6933.03        | 5951.44       | 6707.97        |
-| 64      | 8163.87 | 8020.68        | 7563.76       | 6876.04        |
-| 128     | 7794.91 | 6734           | 7219.98       | 5742.93        |
-| 256     | 7920.5  | 7678.64        | 7365.66       | 6116.13        |
-| 512     | 7032.53 | 7162.45        | 7581.16       | 6604.03        |
-| 1024    | 5237.32 | 4765.95        | 7636.81       | 3821.67        |
+| szBlock | MFlops   | MFlops(n=2048) | MFlops(n=512) | MFlops(n=4096) |
+| ------- | -------- | -------------- | ------------- | -------------- |
+| 32      | 7 203.63 | 6 933.03       | 5 951.44      | 6 707.97       |
+| 64      | 8 163.87 | 8 020.68       | 7 563.76      | 6 876.04       |
+| 128     | 7 794.91 | 6 734          | 7 219.98      | 5 742.93       |
+| 256     | 7 920.5  | 7 678.64       | 7 365.66      | 6 116.13       |
+| 512     | 7 032.53 | 7 162.45       | 7 581.16      | 6 604.03       |
+| 1024    | 5 237.32 | 4 765.95       | 7 636.81      | 3 821.67       |
 
 *Discuter les résultats.*
 
@@ -141,16 +141,16 @@ On constate que le passage d'une taille de blocks de 32 à 64 augmente les perfo
 ### 6 - Bloc + OMP
 
 
-| szBlock | OMP_NUM | MFlops  | MFlops(n=2048) | MFlops(n=512) | MFlops(n=4096) |
-| ------- | ------- | ------- | -------------- | ------------- | -------------- |
-| 1024    | 1       | 6725.49 | 6058.91        | 7962.14       | 5060.07        |
-| 1024    | 8       | 6408.   | 6353.12        | 7257.47       | 5351.71        |
-| 512     | 1       | 7967.41 | 8097.72        | 7514.1        | 6158.58        |
-| 512     | 8       | 7104.71 | 8078.97        | 6798.3        | 6417.03        |
+| szBlock | OMP_NUM | MFlops   | MFlops(n=2048) | MFlops(n=512) | MFlops(n=4096) |
+| ------- | ------- | -------- | -------------- | ------------- | -------------- |
+| 1024    | 1       | 4 390.35 | 4 398.76       | 5 137.94      | 4 065.65       |
+| 1024    | 8       | 4 501.39 | 7 103.52       | 2 143.5       | 13 378.6       |
+| 512     | 1       | 6 148.47 | 6 480.19       | 5 343.09      | 5 332.55       |
+| 512     | 8       | 8 563.33 | 19 587.8       | 2 352.61      | 19 296.3       |
 
 *Discuter les résultats.*
 
-On constate que l'augmentation de la parallélisation devient intéressante pour des tailles de blocks supérieures à 512.
+On constate que l'augmentation de la parallélisation devient intéressante pour des tailles de blocks supérieures à 512 (comme précédemment). La parallélisation associée à l'approche par blocks fournit autrement de meilleures performances que les cas précédents.
 
 ### Comparaison avec BLAS, Eigen et numpy
 
