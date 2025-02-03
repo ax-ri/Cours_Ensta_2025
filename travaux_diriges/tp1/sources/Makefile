@@ -5,13 +5,11 @@ include Make_linux.inc
 CXXFLAGS = -std=c++14
 ifdef DEBUG
 CXXFLAGS += -g -O0 -Wall -fbounds-check -pedantic -D_GLIBCXX_DEBUG
-CXXFLAGS2 = CXXFLAGS
 else
-CXXFLAGS2 = ${CXXFLAGS} -O2 -march=native -Wall 
 CXXFLAGS += -O3 -march=native -Wall
 endif
 
-ALL= calcul_pi.exe TestProductMatrix.exe test_product_matrice_blas.exe 
+ALL= calcul_pi.exe TestProductMatrix.exe test_product_matrice_blas.exe hypercube.exe jeton.exe
 
 default:	help
 
@@ -21,16 +19,22 @@ clean:
 	@rm -fr *.o *.exe *~
 
 .cpp.o:
-	$(CXX) $(CXXFLAGS2) -c $^ -o $@	
+	$(CXX) $(CXXFLAGS) -c $^ -o $@
 
 calcul_pi.exe: calcul_pi.cpp
 	$(MPICXX) $(CXXFLAGS) $^ -o $@
 
+jeton.exe: jeton.cpp
+	$(MPICXX) $(CXXFLAGS) $^ -o $@
+
+hypercube.exe: hypercube.cpp
+	$(MPICXX) $(CXXFLAGS) $^ -o $@
+
 TestProductMatrix.exe : TestProductMatrix.o Matrix.hpp Matrix.o ProdMatMat.o
-	$(CXX) $(CXXFLAGS2) $^ -o $@ $(LIB)	
+	$(CXX) $(CXXFLAGS) $^ -o $@ $(LIB)
 
 test_product_matrice_blas.exe : test_product_matrice_blas.o Matrix.hpp Matrix.o
-	$(CXX) $(CXXFLAGS2) $^ -o $@ $(LIB)	$(BLAS)
+	$(CXX) $(CXXFLAGS) $^ -o $@ $(LIB)	$(BLAS)
 
 help:
 	@echo "Available targets : "

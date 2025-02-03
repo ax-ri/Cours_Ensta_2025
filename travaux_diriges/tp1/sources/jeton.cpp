@@ -8,29 +8,6 @@
 #include <sstream>
 #include <string>
 
-// Attention , ne marche qu'en C++ 11 ou supérieur :
-double approximate_pi(unsigned long nbSamples, unsigned long nbSamplesGlob,
-                      int rank) {
-  typedef std::chrono::high_resolution_clock myclock;
-  myclock::time_point beginning = myclock::now();
-  myclock::duration d = beginning.time_since_epoch();
-  unsigned seed = d.count() + rank;
-  std::default_random_engine generator(seed);
-  std::uniform_real_distribution<double> distribution(-1.0, 1.0);
-  unsigned long nbDarts = 0;
-  // Throw nbSamples darts in the unit square [-1 :1] x [-1 :1]
-  for (unsigned sample = 0; sample < nbSamples; ++sample) {
-    double x = distribution(generator);
-    double y = distribution(generator);
-    // Test if the dart is in the unit disk
-    if (x * x + y * y <= 1)
-      nbDarts++;
-  }
-  // Number of nbDarts throwed in the unit disk
-  double ratio = double(nbDarts) / double(nbSamples);
-  return ratio;
-}
-
 int main(int nargs, char *argv[]) {
   // On initialise le contexte MPI qui va s'occuper :
   //    1. Créer un communicateur global, COMM_WORLD qui permet de gérer
@@ -59,22 +36,27 @@ int main(int nargs, char *argv[]) {
   fileName << "Output" << std::setfill('0') << std::setw(5) << rank << ".txt";
   std::ofstream output(fileName.str().c_str());
 
-  const unsigned long totalSamples = 80'000'000;
-  unsigned long localTotalSamples = totalSamples / nbp;
-  const unsigned long remainingSamples = totalSamples % nbp;
-  if ((unsigned long)rank < remainingSamples) {
-    localTotalSamples += 1;
+  // Rajout de code....
+  int tag = 101;
+  MPI_Status status;
+  int token = 0;
+
+  if (rank == 0) {
+    // send then receive
+    MPI_Send(&token, 1, MPI_INT, rank + 1, tag, globComm);
+    MPI_Recv(&token, 1, MPI_INT, nbp - 1, tag, globComm, &status);
+  } else {
+    // receive then send
+    MPI_Recv(&token, 1, MPI_INT, rank - 1, tag, globComm, &status);
+    token++;
+    MPI_Send(&token, 1, MPI_INT, (rank + 1) % nbp, tag, globComm);
   }
-  double localApprox = approximate_pi(localTotalSamples, totalSamples, rank);
-  double globalApprox = 0.;
-  MPI_Allreduce(&localApprox, &globalApprox, 1, MPI_DOUBLE, MPI_SUM, globComm);
 
-  output << "Global pi approximation: " << globalApprox << std::endl;
-
+  output << "Token value : " << token << std::endl;
   output.close();
   // A la fin du programme, on doit synchroniser une dernière fois tous les
   // processus afin qu'aucun processus ne se termine pendant que d'autres
-  // processus continue à tourner. Si on oublie cet instruction, on aura une
+  // processus continue à tourner. Si on oublie cette instruction, on aura une
   // plantage assuré des processus qui ne seront pas encore terminés.
   MPI_Finalize();
   return EXIT_SUCCESS;

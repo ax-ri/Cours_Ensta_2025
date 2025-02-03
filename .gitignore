@@ -1,0 +1,6 @@
+.vscode/
+
+# build files
+*.o
+Output*.txt
+*.exe
