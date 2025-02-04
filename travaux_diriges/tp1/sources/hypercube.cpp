@@ -1,4 +1,5 @@
 #include <chrono>
+#include <cmath>
 #include <cstdlib>
 #include <fstream>
 #include <iomanip>
@@ -50,6 +51,28 @@ void hypercube_dim2(int rank, int nbp, std::ofstream &output) {
   output << "Token value : " << token << std::endl;
 }
 
+void hypercube(int d, int rank, int nbp, std::ofstream &output) {
+  int token = 0;
+  if (rank == 0) {
+    token = 42;
+  }
+
+  for (int k = 0; k < d; ++k) {
+    const int m = 1 << k;
+    if (rank <= m - 1) {
+      std::cout << " k = " << k << " rank " << rank << " send to " << m + rank
+                << std::endl;
+      MPI_Send(&token, 1, MPI_INT, m + rank, tag, globComm);
+    } else if (rank <= 2 * m - 1) {
+      std::cout << " k = " << k << " rank " << rank << " receive from "
+                << rank - m << std::endl;
+      MPI_Recv(&token, 1, MPI_INT, rank - m, tag, globComm, &status);
+    }
+  }
+
+  output << "Token value : " << token << std::endl;
+}
+
 int main(int nargs, char *argv[]) {
   // On initialise le contexte MPI qui va s'occuper :
   //    1. Créer un communicateur global, COMM_WORLD qui permet de gérer
@@ -75,7 +98,8 @@ int main(int nargs, char *argv[]) {
   fileName << "Output" << std::setfill('0') << std::setw(5) << rank << ".txt";
   std::ofstream output(fileName.str().c_str());
 
-  hypercube_dim2(rank, nbp, output);
+  int d = log2(nbp);
+  hypercube(d, rank, nbp, output);
 
   output.close();
 
