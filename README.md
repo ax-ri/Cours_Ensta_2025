@@ -4,4 +4,8 @@ Cours OS 202.
 
 ## Comptes-rendus de TP
 
-Voir le fichier README dans le dossier `travaux_diriges/tp<n>/sources/README.md`.
+| TP  | Chemin du compte-rendu                  |
+| --- | --------------------------------------- |
+| 1   | `travaux_diriges/tp1/sources/README.md` |
+| 2   | `travaux_diriges/tp2/tp2.md`            |
+

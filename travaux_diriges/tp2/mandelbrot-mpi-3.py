@@ -56,26 +56,31 @@ class MandelbrotSet:
 mandelbrot_set = MandelbrotSet(max_iterations=50, escape_radius=10)
 width, height = 1024, 1024
 
-
-scaleX = 3.0 / width
-scaleY = 2.25 / height
-convergenceLoc = np.empty((height, width), dtype=np.double)
-# Calcul de l'ensemble de mandelbrot :
-deb = time()
-for y in range(rank, height, nbp):
-    for x in range(width):
-        c = complex(-2.0 + scaleX * x, -1.125 + scaleY * y)
-        convergenceLoc[y, x] = mandelbrot_set.convergence(c, smooth=True)
-
-convergence = np.empty((height, width), dtype=np.double)
-globCom.Reduce(convergenceLoc, convergence, MPI.SUM, 0)
-fin = time()
-print(f"Temps du calcul de l'ensemble de Mandelbrot : {fin-deb}")
-
 if rank == 0:
+    convergence = np.empty((height, width), dtype=np.double)
+    for k in range(1, nbp):
+        globCom.send(range(k - 1, height, nbp - 1), k)
+
+    for k in range(1, nbp):
+        convergence += globCom.recv(source=k)
+
     # Constitution de l'image résultante :
     deb = time()
     image = Image.fromarray(np.uint8(matplotlib.cm.plasma(convergence) * 255))
     fin = time()
     print(f"Temps de constitution de l'image : {fin-deb}")
     image.show()
+else:
+    yValues = globCom.recv(source=0)
+    scaleX = 3.0 / width
+    scaleY = 2.25 / height
+    convergenceLoc = np.empty((height, width), dtype=np.double)
+    # Calcul de l'ensemble de mandelbrot :
+    deb = time()
+    for y in yValues:
+        for x in range(width):
+            c = complex(-2.0 + scaleX * x, -1.125 + scaleY * y)
+            convergenceLoc[y, x] = mandelbrot_set.convergence(c, smooth=True)
+    globCom.send(convergenceLoc, 0)
+    fin = time()
+    print(f"Temps du calcul de l'ensemble de Mandelbrot : {fin-deb}")
