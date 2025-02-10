@@ -167,3 +167,67 @@ On teste avec BLAS (code fourni).
 
 L'évolution des performances est similaire à celle observée dans les questions précédentes, mais les performances en elles-même sont bien meilleures en utilisant une bibliothèque déjà optimisée.
 
+
+## Exercice 2 : Parallélisation MPI
+
+### Question 1 - Circulation d’un jeton dans un anneau
+
+Voir le fichier `jeton.cpp`.
+
+### Question 2 - Calcul très approché de pi
+
+Voir les fichiers `calcul_pi.cpp` et `compute_pi.py`.
+Voici les différentes temps d'exécutions relevés (en secondes) :
+
+| nbp | Programme C++ | Speedup | Programme Python | Speedup |
+| --- | ------------- | ------- | ---------------- | ------- |
+| 1   | 1.33387       | 1       | 1.54832          | 1       |
+| 2   | 0.704513      | 1.89    | 1.05533          | 1.47    |
+| 3   | 0.498195      | 2.68    | 0.93135          | 1.66    |
+| 4   | 0.378867      | 3.52    | 0.72800          | 2.13    |
+
+## Question 3 - Diffusion d’un entier dans un réseau hypercube
+
+Voir le fichier `hypercube.cpp`. 
+
+Note : pour cet exercice, l'ordinateur disponible en SSH à l'adresse `salle.ensta.fr` a été utilisé pour pouvoir utiliser plus que 4 coeurs. Voici les détails de cette machine :
+```txt
+$ lscpu
+Architecture :                          x86_64
+Mode(s) opératoire(s) des processeurs : 32-bit, 64-bit
+Boutisme :                              Little Endian
+Processeur(s) :                         32
+Liste de processeur(s) en ligne :       0-31
+Thread(s) par cœur :                    2
+Cœur(s) par socket :                    8
+Socket(s) :                             2
+Nœud(s) NUMA :                          2
+Identifiant constructeur :              GenuineIntel
+Famille de processeur :                 6
+Modèle :                                62
+Nom de modèle :                         Intel(R) Xeon(R) CPU E5-2640 v2 @ 2.00GHz
+Révision :                              4
+Vitesse du processeur en MHz :          1355.257
+Vitesse maximale du processeur en MHz : 2500,0000
+Vitesse minimale du processeur en MHz : 1200,0000
+BogoMIPS :                              3990.19
+Virtualisation :                        VT-x
+Cache L1d :                             32K
+Cache L1i :                             32K
+Cache L2 :                              256K
+Cache L3 :                              20480K
+Nœud NUMA 0 de processeur(s) :          0-7,16-23
+Nœud NUMA 1 de processeur(s) :          8-15,24-31
+```
+
+Voici les différentes temps d'exécutions relevés (en secondes) :
+
+| nbp | Dimension $d$ de l'hypercube | Temps d'exécution |
+| --- | ---------------------------- | ----------------- |
+| 2   | 1                            | 4.563e-05         |
+| 4   | 2                            | 3.6872e-05        |
+| 8   | 3                            | 5.6614e-05        |
+| 16  | 4                            | 6.2126e-05        |
+| 32  | 5                            | 7.8606e-05        |
+| 64  | 6                            | 6.2487e-05        |
+| 128 | 7                            | 5.3955e-05        |

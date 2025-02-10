@@ -65,9 +65,12 @@ int main(int nargs, char *argv[]) {
   if ((unsigned long)rank < remainingSamples) {
     localTotalSamples += 1;
   }
+  std::chrono::time_point<std::chrono::system_clock> start, end;
+  start = std::chrono::system_clock::now();
   double localApprox = approximate_pi(localTotalSamples, totalSamples, rank);
   double globalApprox = 0.;
   MPI_Allreduce(&localApprox, &globalApprox, 1, MPI_DOUBLE, MPI_SUM, globComm);
+  end = std::chrono::system_clock::now();
 
   output << "Global pi approximation: " << globalApprox << std::endl;
 
@@ -77,5 +80,10 @@ int main(int nargs, char *argv[]) {
   // processus continue à tourner. Si on oublie cet instruction, on aura une
   // plantage assuré des processus qui ne seront pas encore terminés.
   MPI_Finalize();
+
+  std::chrono::duration<double> elapsed_seconds = end - start;
+  std::cout << "Temps CPU calcul de pi : " << elapsed_seconds.count()
+            << " secondes\n";
+
   return EXIT_SUCCESS;
 }
