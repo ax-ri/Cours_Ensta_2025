@@ -99,7 +99,11 @@ int main(int nargs, char *argv[]) {
   std::ofstream output(fileName.str().c_str());
 
   int d = log2(nbp);
+  std::chrono::time_point<std::chrono::system_clock> start, end;
+  start = std::chrono::system_clock::now();
   hypercube(d, rank, nbp, output);
+  end = std::chrono::system_clock::now();
+  std::chrono::duration<double> elapsed_seconds = end - start;
 
   output.close();
 
@@ -108,5 +112,8 @@ int main(int nargs, char *argv[]) {
   // processus continue à tourner. Si on oublie cette instruction, on aura une
   // plantage assuré des processus qui ne seront pas encore terminés.
   MPI_Finalize();
+
+  std::cout << "Temps CPU hypercube dimension " << d << " : "
+            << elapsed_seconds.count() << " secondes\n";
   return EXIT_SUCCESS;
 }
