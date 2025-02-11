@@ -28,7 +28,7 @@ double approximate_pi(unsigned long nbSamples, unsigned long nbSamplesGlob,
   }
   // Number of nbDarts throwed in the unit disk
   double ratio = double(nbDarts) / double(nbSamples);
-  return ratio;
+  return 4.f * ratio;
 }
 
 int main(int nargs, char *argv[]) {
@@ -70,6 +70,7 @@ int main(int nargs, char *argv[]) {
   double localApprox = approximate_pi(localTotalSamples, totalSamples, rank);
   double globalApprox = 0.;
   MPI_Allreduce(&localApprox, &globalApprox, 1, MPI_DOUBLE, MPI_SUM, globComm);
+  globalApprox /= nbp;
   end = std::chrono::system_clock::now();
 
   output << "Global pi approximation: " << globalApprox << std::endl;
