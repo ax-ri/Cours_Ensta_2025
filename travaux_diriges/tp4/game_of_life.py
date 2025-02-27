@@ -30,6 +30,11 @@ globCom = MPI.COMM_WORLD.Dup()
 rank = globCom.Get_rank()
 nbp = globCom.Get_size()
 
+newCom = globCom.Split(rank != 0, rank)
+print(
+    f"rang global : {rank}, rang local : {newCom.Get_rank()}, nb de processus locaux : {newCom.Get_size()}"
+)
+
 
 class Grille:
     """
@@ -46,6 +51,8 @@ class Grille:
 
     def __init__(
         self,
+        rank: int,
+        nbp: int,
         dim,
         init_pattern=None,
         color_life=pg.Color("black"),
@@ -54,11 +61,27 @@ class Grille:
         import random
 
         self.dimensions = dim
+        self.dimensions_loc = (
+            dim[0] // nbp + (1 if rank < dim[0] % nbp else 0),
+            dim[1],
+        )
+        self.start_loc = rank * self.dimensions_loc[0] + (
+            dim[0] % nbp if rank >= dim[0] % nbp else 0
+        )
+
         if init_pattern is not None:
-            self.cells = np.zeros(self.dimensions, dtype=np.uint8)
-            indices_i = [v[0] for v in init_pattern]
+            self.cells = np.zeros(
+                (self.dimensions_loc[0] + 2, self.dimensions_loc[1]), dtype=np.uint8
+            )
+            indices_i = [
+                v[0] - self.start_loc + 1
+                for v in init_pattern
+                if v[0] >= self.start_loc
+                and v[0] < self.start_loc + self.dimensions_loc[0]
+            ]
             indices_j = [v[1] for v in init_pattern]
-            self.cells[indices_i, indices_j] = 1
+            if len(indices_i) > 0:
+                self.cells[indices_i, indices_j] = 1
         else:
             self.cells = np.random.randint(2, size=dim, dtype=np.uint8)
         self.col_life = color_life
@@ -78,6 +101,27 @@ class Grille:
         diff_cells = next_cells != self.cells
         self.cells = next_cells
         return diff_cells
+
+    def update_ghost_cells(self):
+        """
+        Met à jour les cellules fantômes
+        """
+        req1 = newCom.Irecv(
+            self.cells[-1, :], source=(newCom.rank + 1) % newCom.size, tag=101
+        )
+        req2 = newCom.Irecv(
+            self.cells[0, :],
+            source=(newCom.rank + newCom.size - 1) % newCom.size,
+            tag=102,
+        )
+        newCom.Send(self.cells[-2, :], dest=(newCom.rank + 1) % newCom.size, tag=102)
+        newCom.Send(
+            self.cells[1, :],
+            dest=(newCom.rank + newCom.size - 1) % newCom.size,
+            tag=101,
+        )
+        req1.Wait()
+        req2.Wait()
 
 
 class App:
@@ -106,7 +150,7 @@ class App:
         self.colors = np.array([self.grid.col_dead[:-1], self.grid.col_life[:-1]])
 
     def draw(self):
-        surface = pg.surfarray.make_surface(self.colors[self.grid.cells.T])
+        surface = pg.surfarray.make_surface(self.colors[self.grid.cells[1:-1, :].T])
         surface = pg.transform.flip(surface, False, True)
         surface = pg.transform.scale(surface, (self.width, self.height))
         self.screen.blit(surface, (0, 0))
@@ -347,7 +391,7 @@ if __name__ == "__main__":
             ],
         ),
     }
-    choice = "glider"
+    choice = "block_switch_engine"
     if len(sys.argv) > 1:
         choice = sys.argv[1]
     print(f"Pattern initial choisi : {choice}")
@@ -363,37 +407,48 @@ if __name__ == "__main__":
     except KeyError:
         print("No such pattern. Available ones are:", dico_patterns.keys())
         exit(1)
-    grid = Grille(*init_pattern)
     if rank == 0:
         pg.init()
+        grid = Grille(0, 1, *init_pattern)
         appli = App((resx, resy), grid)
-
-    loop = True
-    while loop:
-        time.sleep(0.01)  # A régler ou commenter pour vitesse maxi
-        if rank == 0:
-            t1 = time.time()
-            globCom.Recv(grid.cells)
-            appli.draw()
+        loop = True
+        while loop:
+            globCom.send(1, dest=1)
+            appli.grid.cells[1:-1, :] = globCom.recv(source=1)
             t2 = time.time()
+            appli.draw()
+            t3 = time.time()
             for event in pg.event.get():
                 if event.type == pg.QUIT:
                     loop = False
-                    print(f"\nTemps {rank} : {t2-t1:2.2e} secondes\r")
-                    globCom.send(-1, dest=1, tag=1)
-                    continue
-        else:
-            t1 = time.time()
-            grid.compute_next_iteration()
-            t2 = time.time()
-            if globCom.Iprobe(tag=1):
-                loop = False
-                print(f"\nTemps {rank} : {t2-t1:2.2e} secondes\r")
-                continue
-            else:
-                globCom.Send(grid.cells, 0)
-        print(f"Temps {rank} : {t2-t1:2.2e} secondes\r", end="")
+                    pg.quit()
+                    globCom.send(-1, dest=1)
+            print(f"Temps affichage : {t3-t2:2.2e} secondes", flush=True)
+    else:
+        grid = Grille(newCom.rank, newCom.size, *init_pattern)
+        grid.update_ghost_cells()
+        print(f"rank loc : {newCom.rank}, cells locales : \n{grid.cells.T}")
 
-    if rank == 0:
-        globCom.Irecv(grid.cells)
-        pg.quit()
+        grid_glob = None
+        if newCom.rank == 0:
+            grid_glob = np.zeros(init_pattern[0], dtype=np.uint8)
+        sendcounts = np.array(newCom.gather(grid.cells[1:-1, :].size, root=0))
+
+        loop = True
+        while loop:
+            time.sleep(0.05)  # A régler ou commenter pour vitesse maxi
+            t1 = time.time()
+            diff = grid.compute_next_iteration()
+            grid.update_ghost_cells()
+            t2 = time.time()
+            newCom.Gatherv(grid.cells[1:-1, :], [grid_glob, sendcounts], root=0)
+            if newCom.rank == 0:
+                if globCom.Iprobe(source=0):
+                    a = globCom.recv(source=0)
+                    if a == -1:
+                        loop = False
+                    else:
+                        globCom.send(grid_glob, dest=0)
+            print(
+                f"Temps calcul prochaine generation : {t2-t1:2.2e} secondes", flush=True
+            )
