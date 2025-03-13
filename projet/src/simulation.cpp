@@ -1,6 +1,8 @@
 #include <cassert>
 #include <chrono>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <thread>
@@ -12,12 +14,14 @@ using namespace std::string_literals;
 using namespace std::chrono_literals;
 
 struct ParamsType {
-  ParamsType() : display(true) {}
+  ParamsType() : display(true), dump(false), check(false) {}
   double length{1.};
   unsigned discretization{20u};
   std::array<double, 2> wind{0., 0.};
   Model::LexicoIndices start{10u, 10u};
   bool display;
+  bool dump;
+  bool check;
 };
 
 void analyze_arg(int nargs, char *args[], ParamsType &params) {
@@ -140,6 +144,29 @@ void analyze_arg(int nargs, char *args[], ParamsType &params) {
   if (pos < key.size()) {
     params.display = false;
     analyze_arg(nargs - 1, &args[1], params);
+  }
+
+  if (key == "-d"s) {
+    params.dump = true;
+    analyze_arg(nargs - 1, &args[1], params);
+    return;
+  }
+  pos = key.find("--dump");
+  if (pos < key.size()) {
+    params.dump = true;
+    analyze_arg(nargs - 1, &args[1], params);
+    return;
+  }
+
+  if (key == "-c"s) {
+    params.check = true;
+    analyze_arg(nargs - 1, &args[1], params);
+    return;
+  }
+  pos = key.find("--check");
+  if (pos < key.size()) {
+    params.check = true;
+    analyze_arg(nargs - 1, &args[1], params);
     return;
   }
 }
@@ -157,6 +184,8 @@ ParamsType parse_arguments(int nargs, char *args[]) {
     -w, --wind=VX,VY            Définit le vecteur vitesse du vent (pas de vent par défaut).
     -s, --start=COL,ROW         Définit les indices I,J de la case où commence l'incendie (milieu de la carte par défaut)
     --no-display                Désactive l'affichage de la simulation
+    -d, --dump                  Dump le contenu de la simulation toutes les 32 itérations
+    -c, --check                 Vérifie que la simulation est la même que le dump (nécessite --dump au préalable)
 )RAW";
     exit(EXIT_SUCCESS);
   }
@@ -201,7 +230,38 @@ void display_params(ParamsType const &params) {
             << params.wind[1] << "]" << std::endl
             << "\tPosition initiale du foyer (col, ligne) : "
             << params.start.column << ", " << params.start.row << std::endl
-            << "Affichage: " << (params.display ? "yes" : "no") << std::endl;
+            << "\tAffichage: " << (params.display ? "yes" : "no") << std::endl
+            << "\tDumping: " << (params.dump ? "yes" : "no") << std::endl;
+}
+
+void dumpSimulation(const Model &simu) {
+  std::ofstream outFile("dump/" + std::to_string(simu.time_step()) + ".txt");
+  const auto &fireMap = simu.fire_map();
+  const auto &vegetalMap = simu.vegetal_map();
+  for (unsigned int i = 0; i < fireMap.size(); ++i) {
+    outFile << (int)fireMap[i] << " ";
+  }
+  outFile << "\n";
+  for (unsigned int i = 0; i < vegetalMap.size(); ++i) {
+    outFile << (int)vegetalMap[i] << " ";
+  }
+  outFile.close();
+}
+
+void checkSimulation(const Model &simu) {
+  std::ifstream inFile("dump/" + std::to_string(simu.time_step()) + ".txt");
+  const auto &fireMap = simu.fire_map();
+  const auto &vegetalMap = simu.vegetal_map();
+  int x;
+  for (unsigned int i = 0; i < fireMap.size(); ++i) {
+    inFile >> x;
+    assert((int)fireMap[i] == x);
+  }
+  for (unsigned int i = 0; i < vegetalMap.size(); ++i) {
+    inFile >> x;
+    assert((int)vegetalMap[i] == x);
+  }
+  inFile.close();
 }
 
 int main(int nargs, char *args[]) {
@@ -214,17 +274,39 @@ int main(int nargs, char *args[]) {
                        ? Displayer::init_instance(params.discretization,
                                                   params.discretization)
                        : nullptr;
+  if (params.dump) {
+    // clear output dir
+    std::filesystem::remove_all("dump");
+    std::filesystem::create_directory("dump");
+  }
+
   auto simu =
       Model(params.length, params.discretization, params.wind, params.start);
   SDL_Event event;
   bool stop = false;
+
+  std::chrono::time_point<std::chrono::system_clock> start, end;
+  auto displayDuration = std::chrono::duration<double>::zero();
+  start = std::chrono::system_clock::now();
+  int itCount = 0;
+
   while (simu.update() && !stop) {
-    if ((simu.time_step() & 31) == 0)
+    if ((simu.time_step() & 31) == 0) {
       std::cout << "Time step " << simu.time_step()
                 << "\n===============" << std::endl;
+      if (params.dump) {
+        dumpSimulation(simu);
+      } else if (params.check) {
+        checkSimulation(simu);
+      }
+    }
     if (params.display) {
+      std::chrono::time_point<std::chrono::system_clock> displayStart,
+          displayEnd;
+      displayStart = std::chrono::system_clock::now();
       displayer->update(simu.vegetal_map(), simu.fire_map());
-
+      displayEnd = std::chrono::system_clock::now();
+      displayDuration += displayEnd - displayStart;
       while (SDL_PollEvent(&event)) {
         if (event.type == SDL_QUIT) {
           stop = true;
@@ -232,7 +314,20 @@ int main(int nargs, char *args[]) {
         }
       }
     }
-    std::this_thread::sleep_for(0.1s);
+
+    ++itCount;
+    // std::this_thread::sleep_for(0.1s);
   }
+
+  end = std::chrono::system_clock::now();
+
+  const std::chrono::duration<double> duration = end - start;
+  std::cout << "Average time step duration: "
+            << (float)duration.count() / (float)itCount << " seconds"
+            << std::endl;
+  std::cout << "Average display step duration: "
+            << (float)displayDuration.count() / (float)itCount << " seconds"
+            << std::endl;
+
   return EXIT_SUCCESS;
 }
