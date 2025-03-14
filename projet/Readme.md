@@ -2,6 +2,8 @@
 
 ## Partie 3
 
+### Résultats
+
 * Les temps d'exécution du pas de temps de la simulation issus de la synthèse des parties 1 et 2 (parallélisation avec OpenMP et distribution avec MPI) sont présentés ci-dessous. Ligne de commande : `OMP_NUM_THREADS=<X> mpiexec --bind-to none -n 2 simulation.exe -l 200 -n 500 --no-display`
   * _Note:_ L'argument `--no-display` est nécessaire pour ne pas utiliser la SDL sur le serveur `salle` (qui n'a pas d'environnement graphique). Cependant, dans ce mode, seul l'affichage de la fenêtre SDL est désactivé : les envois / réception avec MPI sont conservés, donc les mesures du temps d'affichage ont toujours un sens.
   
@@ -62,3 +64,8 @@
     y-axis "Accélération"
     line [1, 1.145, 1.222, 1.024, 0.858, 0.720, 0.748, 0.594, 0.445, 0.340]
   ```
+
+### Interprétation
+
+* De manière assez logique, l'évolution du temps d'exécution est similaire pour la partie affichage et pour la partie temps.
+* Contrairement à la partie 1, ici on observe une configuration pour laquelle une accélération est possible. Cependant, quand le nombre de threads devient grand, on retrouve le comportement observé en partie 1 : un trop grand nombre de threads fait que le programme perd plus de temps à attendre que les différents threads se synchronisent qu'il n'en gagne en parallélisant. Combiner OpenMP et MPI a donc bien permis d'obtenir une accélération supérieure à 1.
