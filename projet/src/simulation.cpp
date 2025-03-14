@@ -259,10 +259,13 @@ void checkSimulation(const Model &simu) {
       std::cout << "expected " << (int)fireMap[i] << " got " << x << std::endl;
     }
   }
-  // for (unsigned int i = 0; i < vegetalMap.size(); ++i) {
-  //   inFile >> x;
-  //   assert((int)vegetalMap[i] == x);
-  // }
+  for (unsigned int i = 0; i < vegetalMap.size(); ++i) {
+    inFile >> x;
+    if ((int)vegetalMap[i] != x) {
+      std::cout << "expected " << (int)vegetalMap[i] << " got " << x
+                << std::endl;
+    }
+  }
   inFile.close();
 }
 
