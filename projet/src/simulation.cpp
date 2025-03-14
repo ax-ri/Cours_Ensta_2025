@@ -1,7 +1,6 @@
 #include <cassert>
 #include <chrono>
 #include <cstdlib>
-#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <omp.h>
@@ -287,8 +286,8 @@ int main(int nargs, char *args[]) {
 
   if (params.dump) {
     // clear output dir
-    std::filesystem::remove_all("dump");
-    std::filesystem::create_directory("dump");
+    std::cout << "Cleaning dump: " << system("rm -rf dump/") << std::endl;
+    std::cout << "Creating dump dir: " << system("mkdir dump/") << std::endl;
   }
 
   auto simu =
