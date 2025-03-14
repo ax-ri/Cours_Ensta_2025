@@ -19,10 +19,10 @@ clean:
 	@rm -fr *.o *.exe *~ *.d
 
 .cpp.o:
-	$(CXX) $(CXXFLAGS) -MMD -c $< -o $@
+	$(MPICXX) $(CXXFLAGS) -MMD -c $< -o $@
 
 simulation.exe : display.o model.o simulation.o
-	$(CXX) $(CXXFLAGS) $^ -o $@ $(LIB)	
+	$(MPICXX) $(CXXFLAGS) $^ -o $@ $(LIB)	
 
 help:
 	@echo "Available targets : "
