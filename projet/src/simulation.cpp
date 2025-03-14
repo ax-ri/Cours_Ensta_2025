@@ -195,6 +195,19 @@ void display_params(ParamsType const &params) {
             << params.start.column << ", " << params.start.row << std::endl;
 }
 
+// void update_ghost_cells(std::vector<std::uint8_t> &map, int n, int rank, int size){
+//   // envoie les ghosts cells
+//   if (rank != 1){
+//     MPI_Send(map.data(), n, MPI_UINT8_T, rank - 1, 0, MPI_COMM_WORLD);
+//     MPI_Recv(map.data(), n, MPI_UINT8_T, rank - 1, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+//   }
+  
+//   if (rank != size - 1){
+//     MPI_Send(map.data() + (n - 1) * n, n, MPI_UINT8_T, rank + 1, 1, MPI_COMM_WORLD);
+//     MPI_Recv(map.data() + n * n, n, MPI_UINT8_T, rank + 1, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+//   }
+// }
+
 int main(int nargs, char *args[]) {
   // Initialisation de MPI
   MPI_Init(&nargs, &args);
@@ -205,6 +218,18 @@ int main(int nargs, char *args[]) {
   MPI_Comm_size(globComm, &size);
 
   // verif nombre processeurs
+  if (size < 2){
+    if (rank == 0)
+      std::cerr << "Il faut au moins 2 processeurs" << std::endl;
+    MPI_Finalize();
+    return EXIT_FAILURE;
+  }
+
+  // Création d'un groupe de communication pour les calculs
+  // Tous les processus sauf le 0 y sont
+  int color = (rank == 0) ? MPI_UNDEFINED : 0;
+  MPI_Comm calcComm;
+  MPI_Comm_split(globComm, color, rank, &calcComm);
 
   auto params = parse_arguments(nargs - 1, &args[1]);
   if (!check_params(params))
@@ -214,7 +239,10 @@ int main(int nargs, char *args[]) {
   // Calcul sur le proc 1
   bool stop = false;
   int itCount = 0;
-  
+
+  // Taille des tableaux
+  int n = params.discretization;
+
 
   if (rank == 0){
     display_params(params);
@@ -222,7 +250,7 @@ int main(int nargs, char *args[]) {
     SDL_Event event;
     // définition des tableaux dans model.hpp :
     // std::vector<std::uint8_t> m_vegetation_map, m_fire_map;
-    std::size_t map_size = params.discretization * params.discretization;
+    std::size_t map_size = n * n;
     std::vector<std::uint8_t> vegetal_map_data(map_size);
     std::vector<std::uint8_t> fire_map_data(map_size);
 
@@ -252,25 +280,65 @@ int main(int nargs, char *args[]) {
             << std::endl;
   }
 
-  else if (rank == 1){
-    Model simu(params.length, params.discretization, params.wind, params.start);
-    std::size_t map_size = params.discretization * params.discretization;
+  // si pas proc 1, calculs
+  else if (rank != 0){
+    // Découpage de la simulation en tranches
+    int rows_per_proc = n / (size - 1);
+    int start_row = (rank - 1) * rows_per_proc;
+    // ne pas oublier que la dernière tranche n'est pas forcément "pleine"
+    int end_row = (rank == size - 1) ? n : start_row + rows_per_proc;
+    // gère les ghosts cells
+    if (rank != 1)
+      start_row--;
+    if (rank != size - 1)
+      end_row++;
+    // taille tranches
+    int local_n = end_row - start_row;
+    // length de la carte locale
+    double local_length = params.length / n * local_n;
+
+    // initialisation de la simulation
+    Model simu_loc(local_length, local_n, params.wind, params.start);
+    std::size_t map_size = n * local_n;
+
+    // données locales, pour l'envoi
     std::vector<std::uint8_t> vegetal_map_data(map_size);
     std::vector<std::uint8_t> fire_map_data(map_size);
 
-    while(simu.update() && !stop){
-        if ((simu.time_step() & 31) == 0)
-          std::cout << "Time step " << simu.time_step()
-                    << "\n===============" << std::endl;
+    // pour regroupement
+    // ce serait mieux de ne le créer que pour le proc 1
+    std::vector<std::uint8_t> vegetal_map_data_glob(map_size * size);
+    std::vector<std::uint8_t> fire_map_data_glob(map_size * size);
+
+    while(simu_loc.update() && !stop){
+        if ((rank == 1 && simu_loc.time_step() & 31) == 0)
+          std::cout << "Time step " << simu_loc.time_step() << "\n===============" << std::endl;
+
+      // échange ghost cells
+
+      // TODO
+
+      // rassemble les données sur le processus 1/ le processus 0 de calcul
+      MPI_Gather(simu_loc.vegetal_map().data(), map_size, MPI_UINT8_T, vegetal_map_data_glob.data(), map_size, MPI_UINT8_T, 0, calcComm);
+      MPI_Gather(simu_loc.fire_map().data(), map_size, MPI_UINT8_T, fire_map_data_glob.data(), map_size, MPI_UINT8_T, 0, calcComm);
+
+      if (rank==1){
+      // envoie les données
+        MPI_Send(vegetal_map_data_glob.data(), map_size, MPI_UINT8_T, 0, 0, globComm);
+        MPI_Send(fire_map_data_glob.data(), map_size, MPI_UINT8_T, 0, 1, globComm);
+        // vérifie si il faut arrêter
+        MPI_Recv(&stop, 1, MPI_C_BOOL, 0, 2, globComm, MPI_STATUS_IGNORE);
+        MPI_Send(&stop, 1, MPI_C_BOOL, 0, 3, globComm);
+      }
       // envoyer les données
-      vegetal_map_data = simu.vegetal_map();
-      fire_map_data = simu.fire_map();
-      MPI_Send(vegetal_map_data.data(), map_size, MPI_UINT8_T, 0, 0, globComm);
-      MPI_Send(fire_map_data.data(), map_size, MPI_UINT8_T, 0, 1, globComm);
+      // vegetal_map_data = simu.vegetal_map();
+      // fire_map_data = simu.fire_map();
+      // MPI_Send(vegetal_map_data.data(), map_size, MPI_UINT8_T, 0, 0, globComm);
+      // MPI_Send(fire_map_data.data(), map_size, MPI_UINT8_T, 0, 1, globComm);
       // on vérifie si il faut arrêter
       // ce serait mieux d'utiliser de l'asynchrone, mais je n'ai pas réussi
-      MPI_Recv(&stop, 1, MPI_C_BOOL, 0, 2, globComm, MPI_STATUS_IGNORE);
-      MPI_Send(&stop, 1, MPI_C_BOOL, 0, 3, globComm);
+      // MPI_Recv(&stop, 1, MPI_C_BOOL, 0, 2, globComm, MPI_STATUS_IGNORE);
+      // MPI_Send(&stop, 1, MPI_C_BOOL, 0, 3, globComm);
     }
     // Afin d'arrêter l'affichage si le calcul est terminé
     // c'est laid mais ça marche
@@ -281,6 +349,11 @@ int main(int nargs, char *args[]) {
       stop = true;
       MPI_Send(&stop, 1, MPI_C_BOOL, 0, 3, globComm);}
   }
+
+  // libération du groupe de communication
+  if (rank != 0)
+    MPI_Comm_free(&calcComm);
+
   MPI_Finalize();
   return EXIT_SUCCESS;
 }
