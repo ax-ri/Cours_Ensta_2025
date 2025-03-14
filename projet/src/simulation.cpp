@@ -4,6 +4,7 @@
 #include <iostream>
 #include <string>
 #include <thread>
+#include <mpi.h>
 
 #include "display.hpp"
 #include "model.hpp"
@@ -194,29 +195,90 @@ void display_params(ParamsType const &params) {
 }
 
 int main(int nargs, char *args[]) {
+  // Initialisation de MPI
+  MPI_Init(&nargs, &args);
+  int rank, size;
+  MPI_Comm globComm;
+  MPI_Comm_dup(MPI_COMM_WORLD, &globComm);
+  MPI_Comm_rank(globComm, &rank);
+  MPI_Comm_size(globComm, &size);
+  std::cout << "Hello from " << rank << " of " << size << std::endl;
+
+    // verif nombre processeurs
+
   auto params = parse_arguments(nargs - 1, &args[1]);
-  display_params(params);
   if (!check_params(params))
     return EXIT_FAILURE;
 
-  auto displayer =
-      Displayer::init_instance(params.discretization, params.discretization);
-  auto simu =
-      Model(params.length, params.discretization, params.wind, params.start);
-  SDL_Event event;
+  // On affiche sur le proc 0
+  // Calcul sur le proc 1
   bool stop = false;
-  while (simu.update() && !stop) {
-    if ((simu.time_step() & 31) == 0)
-      std::cout << "Time step " << simu.time_step()
-                << "\n===============" << std::endl;
-    displayer->update(simu.vegetal_map(), simu.fire_map());
-    while (SDL_PollEvent(&event)) {
-      if (event.type == SDL_QUIT) {
-        stop = true;
-        break;
+  
+
+  if (rank == 0){
+    display_params(params);
+    auto displayer = Displayer::init_instance(params.discretization, params.discretization);
+    SDL_Event event;
+    // définition des tableaux dans model.hpp :
+    // std::vector<std::uint8_t> m_vegetation_map, m_fire_map;
+    std::size_t map_size = params.discretization * params.discretization;
+    std::vector<std::uint8_t> vegetal_map_data(map_size);
+    std::vector<std::uint8_t> fire_map_data(map_size);
+
+
+
+    while(!stop){
+      // recevoir les données
+      MPI_Recv(vegetal_map_data.data(), map_size, MPI_UINT8_T, 1, 0, globComm, MPI_STATUS_IGNORE);
+      MPI_Recv(fire_map_data.data(), map_size, MPI_UINT8_T, 1, 1, globComm, MPI_STATUS_IGNORE);
+      displayer->update(vegetal_map_data, fire_map_data);
+
+      while (SDL_PollEvent(&event)) {
+        if (event.type == SDL_QUIT) {
+          stop = true;
+          break;
+        }
       }
+      MPI_Send(&stop, 1, MPI_C_BOOL, 1, 2, globComm);
     }
-    std::this_thread::sleep_for(0.1s);
   }
+
+  else if (rank == 1){
+    Model simu(params.length, params.discretization, params.wind, params.start);
+    std::size_t map_size = params.discretization * params.discretization;
+    std::vector<std::uint8_t> vegetal_map_data(map_size);
+    std::vector<std::uint8_t> fire_map_data(map_size);
+
+    while(simu.update() && !stop){
+        if ((simu.time_step() & 31) == 0)
+          std::cout << "Time step " << simu.time_step()
+                    << "\n===============" << std::endl;
+      // envoyer les données
+      vegetal_map_data = simu.vegetal_map();
+      fire_map_data = simu.fire_map();
+      MPI_Send(vegetal_map_data.data(), map_size, MPI_UINT8_T, 0, 0, globComm);
+      MPI_Send(fire_map_data.data(), map_size, MPI_UINT8_T, 0, 1, globComm);
+      MPI_Recv(&stop, 1, MPI_C_BOOL, 0, 2, globComm, MPI_STATUS_IGNORE);
+    }
+  }
+
+  // auto displayer = rank == 0 ? Displayer::init_instance(params.discretization, params.discretization) : nullptr;
+  // auto simu = rank == 0? nullptr : Model(params.length, params.discretization, params.wind, params.start);
+  // SDL_Event event;MPI_Comm globComm;
+  // bool stop = false;
+  // while (simu.update() && !stop) {
+  //   if ((simu.time_step() & 31) == 0)
+  //     std::cout << "Time step " << simu.time_step()
+  //               << "\n===============" << std::endl;
+  //   displayer->update(simu.vegetal_map(), simu.fire_map());
+  //   while (SDL_PollEvent(&event)) {
+  //     if (event.type == SDL_QUIT) {
+  //       stop = true;
+  //       break;
+  //     }
+  //   }
+  //   std::this_thread::sleep_for(0.1s);
+  // }
+  MPI_Finalize();
   return EXIT_SUCCESS;
 }
