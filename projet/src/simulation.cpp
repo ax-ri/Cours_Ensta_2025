@@ -278,8 +278,12 @@ int main(int nargs, char *args[]) {
                                                   params.discretization)
                        : nullptr;
 #pragma omp parallel
-  std::cout << ("Hello from process " + std::to_string(omp_get_thread_num()))
-            << std::endl;
+  {
+    if (omp_get_thread_num() == 0) {
+      std::cout << "Running with " << omp_get_num_threads() << " threads"
+                << std::endl;
+    }
+  }
 
   if (params.dump) {
     // clear output dir
