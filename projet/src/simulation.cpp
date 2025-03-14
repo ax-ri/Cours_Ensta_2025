@@ -12,10 +12,12 @@ using namespace std::string_literals;
 using namespace std::chrono_literals;
 
 struct ParamsType {
+  ParamsType() : display(true) {}
   double length{1.};
   unsigned discretization{20u};
   std::array<double, 2> wind{0., 0.};
   Model::LexicoIndices start{10u, 10u};
+  bool display;
 };
 
 void analyze_arg(int nargs, char *args[], ParamsType &params) {
@@ -133,6 +135,13 @@ void analyze_arg(int nargs, char *args[], ParamsType &params) {
     analyze_arg(nargs - 1, &args[1], params);
     return;
   }
+
+  pos = key.find("--no-display");
+  if (pos < key.size()) {
+    params.display = false;
+    analyze_arg(nargs - 1, &args[1], params);
+    return;
+  }
 }
 
 ParamsType parse_arguments(int nargs, char *args[]) {
@@ -147,6 +156,7 @@ ParamsType parse_arguments(int nargs, char *args[]) {
     -n, --number_of_cases=N     Nombre n de cases par direction pour la discrétisation
     -w, --wind=VX,VY            Définit le vecteur vitesse du vent (pas de vent par défaut).
     -s, --start=COL,ROW         Définit les indices I,J de la case où commence l'incendie (milieu de la carte par défaut)
+    --no-display                Désactive l'affichage de la simulation
 )RAW";
     exit(EXIT_SUCCESS);
   }
@@ -190,7 +200,8 @@ void display_params(ParamsType const &params) {
             << "\tVecteur vitesse : [" << params.wind[0] << ", "
             << params.wind[1] << "]" << std::endl
             << "\tPosition initiale du foyer (col, ligne) : "
-            << params.start.column << ", " << params.start.row << std::endl;
+            << params.start.column << ", " << params.start.row << std::endl
+            << "Affichage: " << (params.display ? "yes" : "no") << std::endl;
 }
 
 int main(int nargs, char *args[]) {
@@ -199,8 +210,10 @@ int main(int nargs, char *args[]) {
   if (!check_params(params))
     return EXIT_FAILURE;
 
-  auto displayer =
-      Displayer::init_instance(params.discretization, params.discretization);
+  auto displayer = params.display
+                       ? Displayer::init_instance(params.discretization,
+                                                  params.discretization)
+                       : nullptr;
   auto simu =
       Model(params.length, params.discretization, params.wind, params.start);
   SDL_Event event;
@@ -209,11 +222,14 @@ int main(int nargs, char *args[]) {
     if ((simu.time_step() & 31) == 0)
       std::cout << "Time step " << simu.time_step()
                 << "\n===============" << std::endl;
-    displayer->update(simu.vegetal_map(), simu.fire_map());
-    while (SDL_PollEvent(&event)) {
-      if (event.type == SDL_QUIT) {
-        stop = true;
-        break;
+    if (params.display) {
+      displayer->update(simu.vegetal_map(), simu.fire_map());
+
+      while (SDL_PollEvent(&event)) {
+        if (event.type == SDL_QUIT) {
+          stop = true;
+          break;
+        }
       }
     }
     std::this_thread::sleep_for(0.1s);
