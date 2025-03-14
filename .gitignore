@@ -1,5 +1,6 @@
 .vscode/
 
+projet/src/dump/
 # build files
 *.o
 *.d
