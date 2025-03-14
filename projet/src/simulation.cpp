@@ -318,16 +318,18 @@ int main(int nargs, char *args[]) {
     std::vector<std::uint8_t> fire_map_data(map_size);
 
     while (!stop) {
-      itCount++;
+      std::chrono::time_point<std::chrono::system_clock> displayStart,
+          displayEnd;
+      displayStart = std::chrono::system_clock::now();
+
       // recevoir les données
       MPI_Recv(vegetal_map_data.data(), map_size, MPI_UINT8_T, 1, 0, globComm,
                MPI_STATUS_IGNORE);
       MPI_Recv(fire_map_data.data(), map_size, MPI_UINT8_T, 1, 1, globComm,
                MPI_STATUS_IGNORE);
+
       if (params.display) {
         // affichage
-        std::chrono::time_point<std::chrono::system_clock> displayStart,
-            displayEnd;
         displayStart = std::chrono::system_clock::now();
         displayer->update(vegetal_map_data, fire_map_data);
         displayEnd = std::chrono::system_clock::now();
@@ -342,6 +344,12 @@ int main(int nargs, char *args[]) {
       }
       MPI_Send(&stop, 1, MPI_C_BOOL, 1, 2, globComm);
       MPI_Recv(&stop, 1, MPI_C_BOOL, 1, 3, globComm, MPI_STATUS_IGNORE);
+
+      if (!params.display) {
+        displayEnd = std::chrono::system_clock::now();
+        displayDuration += displayEnd - displayStart;
+      }
+
       ++itCount;
     }
     std::cout << "Average display step only duration: "
