@@ -4,7 +4,7 @@
 
 * La sortie de la commande `lscpu` pour les deux machines de test (laptop et serveur `salle.ensta.fr`), ainsi que les temps d'exécution de la version séquentielle, sont donnés ci-dessous :
   * Laptop
-    ```bash
+    ```
     $ lscpu
     Architecture:           x86_64
       CPU op-mode(s):       32-bit, 64-bit
@@ -19,13 +19,13 @@
         L2:                 5 MiB (4 instances)
         L3:                 8 MiB (1 instance)
     ```
-    ```bash
+    ```
     $ ./simulation.exe -l 200 -n 500
     Average time step duration: 0.0261982 seconds
     Average display step duration: 0.0157664 seconds
     ```
   *  Serveur `salle`
-    ```bash
+    ```
     $ lscpu
     Architecture :                          x86_64
     Mode(s) opératoire(s) des processeurs : 32-bit, 64-bit
@@ -39,8 +39,8 @@
     Cache L2 :                              256K
     Cache L3 :                              20480K
     ```
-    ```bash
-    $ simulation.exe -l 200 -n 500 --no-display
+    ```
+    $ ./simulation.exe -l 200 -n 500 --no-display
     Average time step duration: 0.0193751 seconds
     Average display step duration: 0 seconds
     ```
@@ -85,3 +85,7 @@
     y-axis "Accélération"
     line [1, 0.697, 0.919, 0.930, 0.844, 0.682, 0.661, 0.634, 0.348, 0.287]
   ```
+
+### Interprétation
+
+Contrairement à ce que l'on pourrait espérer, plus le nombre de threads augmente, plus la simulation met de temps à s'exécuter. Cela peut s'expliquer par le fait que les écritures dans les itérations de la boucle nécessitent d'être réalisées séquentiellement (avec la construction `#pragma omp critical`) pour éviter les _race conditions_. On remarque aussi que les résultats sont légèrement meilleurs pour 3 et 4 threads, mais en aucun cas l'accélération ne dépasse 1.
