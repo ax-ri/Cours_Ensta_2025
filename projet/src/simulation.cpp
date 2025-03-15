@@ -195,18 +195,19 @@ void display_params(ParamsType const &params) {
             << params.start.column << ", " << params.start.row << std::endl;
 }
 
-// void update_ghost_cells(std::vector<std::uint8_t> &map, int n, int rank, int size){
-//   // envoie les ghosts cells
-//   if (rank != 1){
-//     MPI_Send(map.data(), n, MPI_UINT8_T, rank - 1, 0, MPI_COMM_WORLD);
-//     MPI_Recv(map.data(), n, MPI_UINT8_T, rank - 1, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-//   }
+void update_ghost_cells(std::vector<std::uint8_t> &map, int n, int rank, int size){
+  // envoie les ghosts cells
+  // std::cout << "rank " << rank << " size " << size << std::endl;
+  if (rank != 1){
+    MPI_Send(map.data(), n, MPI_UINT8_T, rank - 1, 0, MPI_COMM_WORLD);
+    MPI_Recv(map.data(), n, MPI_UINT8_T, rank - 1, 1, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+  }
   
-//   if (rank != size - 1){
-//     MPI_Send(map.data() + (n - 1) * n, n, MPI_UINT8_T, rank + 1, 1, MPI_COMM_WORLD);
-//     MPI_Recv(map.data() + n * n, n, MPI_UINT8_T, rank + 1, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-//   }
-// }
+  if (rank != size - 1){
+    MPI_Send(map.data() + (n - 1) * n, n, MPI_UINT8_T, rank + 1, 1, MPI_COMM_WORLD);
+    MPI_Recv(map.data() + n * n, n, MPI_UINT8_T, rank + 1, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+  }
+}
 
 int main(int nargs, char *args[]) {
   // Initialisation de MPI
@@ -307,25 +308,88 @@ int main(int nargs, char *args[]) {
 
     // pour regroupement
     // ce serait mieux de ne le créer que pour le proc 1
-    std::vector<std::uint8_t> vegetal_map_data_glob(map_size * size);
-    std::vector<std::uint8_t> fire_map_data_glob(map_size * size);
+    std::vector<std::uint8_t> vegetal_map_data_glob(n*n);
+    std::vector<std::uint8_t> fire_map_data_glob(n*n);
+
+    // données du groupe de calcul
+    int calcRank, calcSize;
+    MPI_Comm_rank(calcComm, &calcRank);
+    MPI_Comm_size(calcComm, &calcSize);
 
     while(simu_loc.update() && !stop){
         if ((rank == 1 && simu_loc.time_step() & 31) == 0)
           std::cout << "Time step " << simu_loc.time_step() << "\n===============" << std::endl;
 
       // échange ghost cells
-
-      // TODO
-
+      vegetal_map_data = simu_loc.vegetal_map();
+      fire_map_data = simu_loc.fire_map();
+      update_ghost_cells(vegetal_map_data, local_n, rank, size); 
+      update_ghost_cells(fire_map_data, local_n, rank, size);
       // rassemble les données sur le processus 1/ le processus 0 de calcul
-      MPI_Gather(simu_loc.vegetal_map().data(), map_size, MPI_UINT8_T, vegetal_map_data_glob.data(), map_size, MPI_UINT8_T, 0, calcComm);
-      MPI_Gather(simu_loc.fire_map().data(), map_size, MPI_UINT8_T, fire_map_data_glob.data(), map_size, MPI_UINT8_T, 0, calcComm);
+      // il faut prendre en compte l'offset
+      // et le fait que la dernière tranche peut avoir une taille différente
+      // seul le proc 1 en a besoin
+      std::vector<int> counts_rev(calcSize);
+      std::vector<int> displacements(calcSize);
+      if (rank == 1){
+        vegetal_map_data_glob.assign(n*n, 255);  // 255 = végétation par défaut
+        fire_map_data_glob.assign(n*n, 0);  
+        int offset = 0;
+        int real_rows_number = 0;
+        for(int i = 0; i < calcSize; i++){
+          if(i == calcSize - 1){
+            real_rows_number = n - rows_per_proc * (calcSize - 1);
+          }
+          else{
+            real_rows_number = rows_per_proc;
+          }
+          // nombre d'elts à recevoir du proc i
+          counts_rev[i] = real_rows_number * n;
+          // décalage
+          displacements[i] = offset;
+          // on se souvient de l'offset pour la suite
+          offset += real_rows_number * n;
+        }
+        // pas de ghost cells
+        int sending_offset = 0;
+        std::cout << "tout va bien" << std::endl;
+        MPI_Gatherv(vegetal_map_data.data() + sending_offset, counts_rev[calcRank], MPI_UINT8_T,vegetal_map_data_glob.data(), counts_rev.data(), displacements.data(), 
+                MPI_UINT8_T, 0, calcComm);
+        std::cout << "alors peut être" << std::endl;
+        MPI_Gatherv(fire_map_data.data() + sending_offset, counts_rev[calcRank], MPI_UINT8_T, fire_map_data_glob.data(), counts_rev.data(), displacements.data(), 
+                MPI_UINT8_T, 0, calcComm);
+        std::cout << "jures ??"<< std::endl;
+      }
+      // Autres processus
+      else{
+        // enlève les ghosts cells
+        int sending_offset = n;
+        int real_rows_number = local_n - 2;
+        if (rank == calcSize - 1){
+          real_rows_number = n - rows_per_proc * (calcSize - 1);
+        }
+
+        std::cout << "ici c'est of" << std::endl;
+        MPI_Gatherv(vegetal_map_data.data() + sending_offset, real_rows_number * n, MPI_UINT8_T,nullptr, nullptr, nullptr, MPI_UINT8_T, 0, calcComm);
+        std::cout << "rien à voir" << std::endl;
+                
+        MPI_Gatherv(fire_map_data.data() + sending_offset, real_rows_number * n, MPI_UINT8_T, nullptr, nullptr, nullptr, MPI_UINT8_T, 0, calcComm);
+      }
+      // offset de l'envoi
+      // à par pour le proc 1, on saute les ghosts cells
+      // int sending_offset = rank == 1 ? 0 :  n;
+
+      
+      // std::cout << "ok" << std::endl;
+      // MPI_Gather(simu_loc.vegetal_map().data(), map_size, MPI_UINT8_T, vegetal_map_data_glob.data(), map_size, MPI_UINT8_T, 0, calcComm);
+      // std::cout << "ok" << std::endl;
+
+      // MPI_Gather(simu_loc.fire_map().data(), map_size, MPI_UINT8_T, fire_map_data_glob.data(), map_size, MPI_UINT8_T, 0, calcComm);
 
       if (rank==1){
       // envoie les données
-        MPI_Send(vegetal_map_data_glob.data(), map_size, MPI_UINT8_T, 0, 0, globComm);
-        MPI_Send(fire_map_data_glob.data(), map_size, MPI_UINT8_T, 0, 1, globComm);
+        MPI_Send(vegetal_map_data_glob.data(), n*n, MPI_UINT8_T, 0, 0, globComm);
+        MPI_Send(fire_map_data_glob.data(), n*n, MPI_UINT8_T, 0, 1, globComm);
         // vérifie si il faut arrêter
         MPI_Recv(&stop, 1, MPI_C_BOOL, 0, 2, globComm, MPI_STATUS_IGNORE);
         MPI_Send(&stop, 1, MPI_C_BOOL, 0, 3, globComm);
