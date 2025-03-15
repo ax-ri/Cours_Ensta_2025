@@ -2,6 +2,14 @@
 
 Cours OS 202.
 
+## Rendu du projet
+
+Travail en binôme : Doris Diallo, Axel Richard
+
+Voir le fichier `projet/Readme.md`.
+
+Le rendu principal est sur la branche `main`. Le code de chaque partie est répartie sur 4 branches nommées `project-part-<n>`.
+
 ## Comptes-rendus de TP
 
 | TP  | Chemin du compte-rendu                  |
